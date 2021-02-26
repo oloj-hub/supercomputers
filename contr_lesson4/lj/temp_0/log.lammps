@@ -1,0 +1,106 @@
+LAMMPS (29 Oct 2020)
+# 3d Lennard-Jones melt
+
+# Единицы измерения: безразмерные
+units		lj
+atom_style	atomic
+
+# Расчет начинает с создания fcc решетки
+lattice		fcc 0.8442
+Lattice spacing in x,y,z = 1.6795962 1.6795962 1.6795962
+
+# Создаем "коробку" в которой будут заперты наши частицы
+region		box block 0 10 0 10 0 10
+create_box	1 box
+Created orthogonal box = (0.0000000 0.0000000 0.0000000) to (16.795962 16.795962 16.795962)
+  2 by 2 by 2 MPI processor grid
+create_atoms	1 box
+Created 4000 atoms
+  create_atoms CPU = 0.001 seconds
+# Задаем массы частиц
+mass		1 1.0
+
+# Задаем начальные скорости генератором случайных чисел с распределение соответсвующем температуре 3.0
+velocity	all create 0 87287
+
+# Задаем Леннард-Джонсовский потенциал взаимодействия
+pair_style	lj/cut 2.5
+pair_coeff	1 1 1.0 1.0 2.5
+
+# Задаем параметры обновления листа "окружения"
+neighbor	0.3 bin
+neigh_modify	every 20 delay 0 check no
+
+# Определяем статистический ансамбль в котором будем считать. Сохраняется: n(число частиц), v(объем ячейки), e(энергия)
+fix		1 all nve
+
+# Каждые 50 шагов выводим положения атомов в файл dump.melt. Далее вы сможете визуализировать все через пакет Lammps
+dump		id all atom 50 dump.melt
+
+# Делаем расчет RDF каждые 50 шагов
+compute 	myRDF all rdf 50
+# Усреднеяем RDF и выводим его каждые 50 шагов в файл tmp.rdf
+fix 		rdf all ave/time 50 1 50 c_myRDF[*] file tmp.rdf mode vector
+#dump		2 all image 25 image.*.jpg type type #		axes yes 0.8 0.02 view 60 -30
+#dump_modify	2 pad 3
+
+#dump		3 all movie 25 movie.mpg type type #		axes yes 0.8 0.02 view 60 -30
+#dump_modify	3 pad 3
+
+# Выводим термодинамические параметры каждые 50 шагов
+thermo		50
+# Расчет длится 300 шагов
+run		300
+Neighbor list info ...
+  update every 20 steps, delay 0 steps, check no
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 2.8
+  ghost atom cutoff = 2.8
+  binsize = 1.4, bins = 12 12 12
+  2 neighbor lists, perpetual/occasional/extra = 1 1 0
+  (1) pair lj/cut, perpetual
+      attributes: half, newton on
+      pair build: half/bin/atomonly/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+  (2) compute rdf, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+Per MPI rank memory allocation (min/avg/max) = 4.046 | 4.046 | 4.046 Mbytes
+Step Temp E_pair E_mol TotEng Press 
+       0            0   -6.7733681            0   -6.7733681   -6.2353173 
+      50 7.7615428e-29   -6.7733681            0   -6.7733681   -6.2353173 
+     100 2.6108963e-28   -6.7733681            0   -6.7733681   -6.2353173 
+     150 4.4371153e-28   -6.7733681            0   -6.7733681   -6.2353173 
+     200 7.3475559e-28   -6.7733681            0   -6.7733681   -6.2353173 
+     250 1.1212721e-27   -6.7733681            0   -6.7733681   -6.2353173 
+     300 1.605394e-27   -6.7733681            0   -6.7733681   -6.2353173 
+Loop time of 0.218204 on 8 procs for 300 steps with 4000 atoms
+
+Performance: 593939.200 tau/day, 1374.859 timesteps/s
+99.8% CPU use with 8 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0.11541    | 0.13431    | 0.16233    |   3.8 | 61.55
+Neigh   | 0.013211   | 0.015628   | 0.018726   |   1.3 |  7.16
+Comm    | 0.02014    | 0.051957   | 0.073656   |   6.9 | 23.81
+Output  | 0.0067995  | 0.0072901  | 0.0073609  |   0.2 |  3.34
+Modify  | 0.0072247  | 0.0076274  | 0.0081795  |   0.3 |  3.50
+Other   |            | 0.001392   |            |       |  0.64
+
+Nlocal:        500.000 ave         666 max         364 min
+Histogram: 1 0 3 0 0 3 0 0 0 1
+Nghost:        1956.00 ave        2092 max        1790 min
+Histogram: 1 0 0 0 3 0 0 3 0 1
+Neighs:        19500.0 ave       26024 max       14156 min
+Histogram: 1 0 3 0 0 3 0 0 0 1
+
+Total # of neighbors = 156000
+Ave neighs/atom = 39.000000
+Neighbor list builds = 15
+Dangerous builds not checked
+Total wall time: 0:00:00
