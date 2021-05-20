@@ -1,0 +1,222 @@
+LAMMPS (29 Oct 2020)
+# 3d metal shear simulation
+
+units		metal
+boundary	s s p
+
+atom_style	atomic
+lattice		fcc 3.52
+Lattice spacing in x,y,z = 3.5200000 3.5200000 3.5200000
+region		box block 0 16.0 0 10.0 0 2.828427
+create_box	3 box
+Created orthogonal box = (0.0000000 0.0000000 0.0000000) to (56.320000 35.200000 9.9560630)
+  4 by 2 by 1 MPI processor grid
+
+lattice		fcc 3.52 orient	x 1 0 0 orient y 0 1 1 orient z 0 -1 1 		origin 0.5 0 0
+Lattice spacing in x,y,z = 3.5200000 4.9780317 4.9780317
+create_atoms	1 box
+Created 1912 atoms
+  create_atoms CPU = 0.001 seconds
+
+pair_style	eam
+pair_coeff	* * Ni_u3.eam
+Reading eam potential file Ni_u3.eam with DATE: 2007-06-11
+
+neighbor	0.3 bin
+neigh_modify	delay 5
+
+region		lower block INF INF INF 0.9 INF INF
+region		upper block INF INF 6.1 INF INF INF
+group		lower region lower
+264 atoms in group lower
+group		upper region upper
+264 atoms in group upper
+group		boundary union lower upper
+528 atoms in group boundary
+group		mobile subtract all boundary
+1384 atoms in group mobile
+
+set		group lower type 2
+Setting atom values ...
+  264 settings made for type
+set		group upper type 3
+Setting atom values ...
+  264 settings made for type
+
+# void
+
+region		void cylinder z 8 3.535534 3.0 INF INF
+delete_atoms	region void
+Deleted 312 atoms, new total = 1600
+
+# temp controllers
+
+compute		new3d mobile temp
+compute		new2d mobile temp/partial 0 1 1
+
+# equilibrate
+
+velocity	mobile create 300.0 5812775 temp new3d
+fix		1 all nve
+fix		2 boundary setforce 0.0 0.0 0.0
+
+fix		3 mobile temp/rescale 10 300.0 300.0 10.0 1.0
+fix_modify	3 temp new3d
+
+thermo		25
+thermo_modify	temp new3d
+WARNING: Temperature for thermo pressure is not for group all (../thermo.cpp:472)
+
+timestep	0.001
+run		100
+Neighbor list info ...
+  update every 1 steps, delay 5 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 5.1
+  ghost atom cutoff = 5.1
+  binsize = 2.55, bins = 23 14 4
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair eam, perpetual
+      attributes: half, newton on
+      pair build: half/bin/atomonly/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.326 | 3.332 | 3.338 Mbytes
+Step Temp E_pair E_mol TotEng Press Volume 
+       0          300    -6865.537            0   -6824.0057   -10404.624     19547.02 
+      25    223.93808   -6832.2598            0   -6801.2583   -1064.9096     19547.02 
+      50          300   -6805.8083            0    -6764.277    4393.7881    19688.471 
+      75    291.18546   -6798.6561            0   -6758.3451    2554.6594    19753.614 
+     100          300   -6809.6014            0   -6768.0701   -3640.0244    19791.489 
+Loop time of 0.0467131 on 8 procs for 100 steps with 1600 atoms
+
+Performance: 184.959 ns/day, 0.130 hours/ns, 2140.727 timesteps/s
+99.3% CPU use with 8 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0.034131   | 0.038074   | 0.042116   |   1.8 | 81.51
+Neigh   | 0.00095077 | 0.0011608  | 0.0013883  |   0.6 |  2.48
+Comm    | 0.0016505  | 0.0059909  | 0.010311   |   4.8 | 12.82
+Output  | 7.2855e-05 | 7.7755e-05 | 8.5588e-05 |   0.0 |  0.17
+Modify  | 0.00064606 | 0.00073135 | 0.00082957 |   0.0 |  1.57
+Other   |            | 0.0006788  |            |       |  1.45
+
+Nlocal:        200.000 ave         235 max         162 min
+Histogram: 2 2 0 0 0 0 0 0 0 4
+Nghost:        564.875 ave         640 max         476 min
+Histogram: 2 2 0 0 0 0 0 0 0 4
+Neighs:        4539.12 ave        5561 max        3500 min
+Histogram: 2 2 0 0 0 0 0 0 2 2
+
+Total # of neighbors = 36313
+Ave neighs/atom = 22.695625
+Neighbor list builds = 4
+Dangerous builds = 0
+
+# shear
+
+velocity	upper set 1.0 0 0
+velocity	mobile ramp vx 0.0 1.0 y 1.4 8.6 sum yes
+
+unfix		3
+fix		3 mobile temp/rescale 10 300.0 300.0 10.0 1.0
+fix_modify	3 temp new2d
+
+dump		1 all atom 100 dump.shear.void
+
+#dump		2 all image 100 image.*.jpg type type #		axes yes 0.8 0.02 view 0 0 zoom 1.5 up 0 1 0 adiam 2.0
+#dump_modify	2 pad 4
+
+#dump		3 all movie 100 movie.mpg type type #		axes yes 0.8 0.02 view 0 0 zoom 1.5 up 0 1 0 adiam 2.0
+#dump_modify	3 pad 4
+
+# Делаем расчет RDF каждые 50 шагов
+compute         myRDF all rdf 50
+# # Усреднеяем RDF и выводим его каждые 50 шагов в файл tmp.rdf
+fix             rdf all ave/time 50 1 50 c_myRDF[*] file tmp.rdf mode vector
+#
+thermo		100
+thermo_modify	temp new2d
+WARNING: Temperature for thermo pressure is not for group all (../thermo.cpp:472)
+
+reset_timestep	0
+run		3000
+Neighbor list info ...
+  update every 1 steps, delay 5 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 5.1
+  ghost atom cutoff = 5.1
+  binsize = 2.55, bins = 23 14 4
+  2 neighbor lists, perpetual/occasional/extra = 1 1 0
+  (1) pair eam, perpetual
+      attributes: half, newton on
+      pair build: half/bin/atomonly/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+  (2) compute rdf, occasional, copy from (1)
+      attributes: half, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+Per MPI rank memory allocation (min/avg/max) = 4.335 | 4.341 | 4.347 Mbytes
+Step Temp E_pair E_mol TotEng Press Volume 
+       0    300.82043   -6809.6014            0   -6781.8382   -4382.0931    19795.881 
+     100      300.309   -6818.7538            0   -6791.0377   -11432.727    19883.695 
+     200          300   -6816.0095            0    -6788.322   -10853.514    19984.572 
+     300    305.63983     -6816.41            0    -6788.202   -10965.443    20004.303 
+     400    303.92361   -6814.3322            0   -6786.2826   -7313.4184    20085.695 
+     500    299.47808   -6812.3425            0   -6784.7031   -7194.8727    20179.847 
+     600    298.57011   -6807.9886            0    -6780.433   -6246.0113    20303.886 
+     700    303.58063   -6802.4172            0   -6774.3992    -3046.481    20388.596 
+     800    302.41238   -6796.4618            0   -6768.5517   -3489.0979    20515.626 
+     900          300   -6791.6691            0   -6763.9816   -2040.6069    20630.442 
+    1000    297.52321   -6784.1617            0   -6756.7027   -2894.9859    20761.136 
+    1100          300   -6781.4298            0   -6753.7423   -4936.8147    20872.288 
+    1200          300   -6779.0437            0   -6751.3562   -7006.9766    21011.532 
+    1300          300   -6783.7354            0   -6756.0478   -10695.454    21133.677 
+    1400    309.02635   -6788.4624            0   -6759.9419   -10741.385    21249.714 
+    1500          300   -6792.3967            0   -6764.7092   -9236.0897    21374.301 
+    1600    303.05685   -6788.1777            0   -6760.2081   -5961.8953    21487.896 
+    1700          300   -6790.6649            0   -6762.9774   -5514.8333     21618.59 
+    1800          300   -6797.8535            0   -6770.1659   -11024.009    21745.621 
+    1900    293.78442   -6796.8358            0    -6769.722   -15702.562    21866.544 
+    2000    293.02102   -6793.5781            0   -6766.5347    -16567.87    21983.802 
+    2100    305.72282   -6789.4231            0   -6761.2074   -14759.699    22103.504 
+    2200          300   -6789.3691            0   -6761.6816   -11987.334    22219.541 
+    2300    302.34249   -6790.1879            0   -6762.2842    -14663.89    22350.236 
+    2400          300   -6787.9061            0   -6760.2186   -20565.509     22472.38 
+    2500    301.60954   -6779.3314            0   -6751.4954   -27488.568    22589.639 
+    2600    299.58028   -6776.1758            0    -6748.527   -30603.737     22717.89 
+    2700     298.4302   -6770.8449            0   -6743.3023   -29374.112     22827.82 
+    2800    301.21664   -6774.0307            0   -6746.2308   -26926.673    22960.958 
+    2900    299.26426   -6767.3623            0   -6739.7426    -17996.58    23089.209 
+    3000    293.41463    -6762.066            0   -6734.9863   -16391.636    23211.354 
+Loop time of 1.502 on 8 procs for 3000 steps with 1600 atoms
+
+Performance: 172.570 ns/day, 0.139 hours/ns, 1997.341 timesteps/s
+100.0% CPU use with 8 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 1.018      | 1.1487     | 1.3123     |   8.9 | 76.48
+Neigh   | 0.047292   | 0.061174   | 0.075867   |   3.8 |  4.07
+Comm    | 0.042979   | 0.19643    | 0.36994    |  24.4 | 13.08
+Output  | 0.015357   | 0.017843   | 0.01821    |   0.7 |  1.19
+Modify  | 0.028761   | 0.036343   | 0.041944   |   2.8 |  2.42
+Other   |            | 0.04155    |            |       |  2.77
+
+Nlocal:        200.000 ave         248 max         148 min
+Histogram: 1 1 2 0 0 0 0 1 1 2
+Nghost:        569.375 ave         603 max         506 min
+Histogram: 1 0 1 0 0 0 0 4 0 2
+Neighs:        4433.25 ave        5784 max        3180 min
+Histogram: 2 0 2 0 0 0 0 2 1 1
+
+Total # of neighbors = 35466
+Ave neighs/atom = 22.166250
+Neighbor list builds = 210
+Dangerous builds = 0
+Total wall time: 0:00:01
